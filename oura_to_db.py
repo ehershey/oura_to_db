@@ -37,7 +37,7 @@ def sentry_init(debug = False):
     debug=False,
     )
 
-autoupdate_version = 218
+autoupdate_version = 224
 
 DB_URL = os.environ["OURA_MONGODB_URI"]
 
@@ -239,6 +239,11 @@ def get_collection():
     database = mongoclient[DB_NAME]
 
     return database[COLLECTION_NAME]
+
+@sentry_sdk.trace
+def mongodb_ping():
+    return  MongoClient(DB_URL)[DB_NAME].command('ping')
+
 
 if __name__ == '__main__':
     try:

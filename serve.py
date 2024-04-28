@@ -41,6 +41,10 @@ app = Flask(__name__)
 def hello_world():
         return "<p>Hello, World!</p>"
 
+@app.route("/ping")
+def ping():
+        return oura_to_db.mongodb_ping()
+
 @app.route('/run')
 @app.route("/run/<path:date>")
 def run(date=None):
