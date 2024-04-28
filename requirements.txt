@@ -5,7 +5,14 @@ oura
 pytz
 pymongo
 datetime
-
-
 sentry_sdk
 sentry-sdk[pymongo]
+sentry-sdk[flask]
+flask
+geopy
+ggps
+gpxpy
+pint
+polyline
+timezonefinder
+gunicorn
