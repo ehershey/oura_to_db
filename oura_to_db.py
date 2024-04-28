@@ -24,19 +24,16 @@ import datetime
 import sentry_sdk
 from sentry_sdk.integrations.pymongo import PyMongoIntegration
 
-sentry_sdk.init(
-    # Set traces_sample_rate to 1.0 to capture 100%
-    # of transactions for performance monitoring.
+def sentry_init(debug = False):
+    sentry_sdk.init(
     traces_sample_rate=1.0,
-    # Set profiles_sample_rate to 1.0 to profile 100%
-    # of sampled transactions.
-    # We recommend adjusting this value in production.
     profiles_sample_rate=1.0,
     enable_tracing=True,
-    integrations = [ PyMongoIntegration(), ],
-)
+    integrations=[PyMongoIntegration(),],
+    debug=debug,
+    )
 
-autoupdate_version = 168
+autoupdate_version = 184
 
 DB_URL = os.environ["OURA_MONGODB_URI"]
 
@@ -48,9 +45,6 @@ OURA_TOKEN = os.environ["OURA_TOKEN"]
 #ACTIVITY_VERSION = 0.1
 ACTIVITY_VERSION = 0.2  # change timestamps to date objects
 #ACTIVITY_VERSION = 0.3  # Add map
-
-PROCESSED_DATES = {}
-
 
 @sentry_sdk.trace
 def get_args():
@@ -103,6 +97,7 @@ def main():
     """
 
     args = get_args()
+    sentry_init(args.debug)
 
     if args.debug:
         logging.getLogger().setLevel(getattr(logging, "DEBUG"))
@@ -121,13 +116,27 @@ def main():
     logging.debug(f"start_date: {start_date}")
     logging.debug(f"end_date: {end_date}")
 
-    ouraclient = get_oura_client( oauth_code=args.oauth_code, force_reauth=args.force_reauth)
+    start_date_string = start_date.strftime("%Y-%m-%d")
+    end_date_string = end_date.strftime("%Y-%m-%d")
 
-    # wants strs
-    # data = ouraclient.activity_summary(start = start_date, end = end_date)
-    data = ouraclient.daily_activity(start_date = start_date.strftime("%Y-%m-%d"), end_date = end_date.strftime("%Y-%m-%d"))
-    #get_daily_activity(start_date = start_date, end_date = end_date)
-    #pprint.pprint(data)
+    processed_dates, inserted_count, modified_count = run(start_date_string,end_date_string, oauth_code=args.oauth_code, force_reauth=args.force_reauth)
+
+    if args.verbose or args.debug:
+        print(f"Processed activities: {processed_count}")
+        print(f"New activities: {inserted_count}")
+        print(f"Modified activities: {modified_count}")
+    for processed_date in processed_dates:
+        print(f"date: {processed_date}")
+
+
+
+
+def run(start_date_string = "", end_date_string = "", oauth_code = None, force_reauth=False):
+
+    processed_dates = {}
+    ouraclient = get_oura_client( oauth_code=oauth_code, force_reauth=force_reauth)
+
+    data = ouraclient.daily_activity(start_date = start_date_string, end_date = end_date_string)
     inserted_count = 0
     modified_count = 0
     processed_count = 0
@@ -146,15 +155,8 @@ def main():
         modified_count += result['modified_count']
         if wrote_to_db:
            dateonly = activity['timestamp'].date()
-           PROCESSED_DATES[dateonly] = True
-    if args.verbose or args.debug:
-        print(f"Processed activities: {processed_count}")
-        print(f"New activities: {inserted_count}")
-        print(f"Modified activities: {modified_count}")
-    for processed_date in PROCESSED_DATES:
-        print(f"date: {processed_date}")
-
-
+           processed_dates[dateonly] = True
+    return processed_dates, inserted_count, modified_count
 
 # return result from replace_one()
 @sentry_sdk.trace
