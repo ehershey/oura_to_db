@@ -23,6 +23,9 @@ import datetime
 
 import sentry_sdk
 from sentry_sdk.integrations.pymongo import PyMongoIntegration
+sentry_sdk.init(
+    debug=False,
+    )
 
 def sentry_init(debug = False):
     sentry_sdk.init(
@@ -30,10 +33,11 @@ def sentry_init(debug = False):
     profiles_sample_rate=1.0,
     enable_tracing=True,
     integrations=[PyMongoIntegration(),],
-    debug=debug,
+    #debug=debug,
+    debug=False,
     )
 
-autoupdate_version = 184
+autoupdate_version = 218
 
 DB_URL = os.environ["OURA_MONGODB_URI"]
 
@@ -88,6 +92,9 @@ def get_args():
 
 @sentry_sdk.trace
 def get_oura_client(oauth_code=None, force_reauth=False):
+    #print(f"OURA_TOKEN: {OURA_TOKEN}")
+    #print(f"oauth_code: {oauth_code}")
+    #print(f"force_reauth: {force_reauth}")
     return OuraClientV2(personal_access_token=OURA_TOKEN)
 
 @sentry_sdk.trace
@@ -97,7 +104,8 @@ def main():
     """
 
     args = get_args()
-    sentry_init(args.debug)
+    print(f"args.debug: {args.debug}")
+    sentry_init(debug=args.debug)
 
     if args.debug:
         logging.getLogger().setLevel(getattr(logging, "DEBUG"))
@@ -119,7 +127,7 @@ def main():
     start_date_string = start_date.strftime("%Y-%m-%d")
     end_date_string = end_date.strftime("%Y-%m-%d")
 
-    processed_dates, inserted_count, modified_count = run(start_date_string,end_date_string, oauth_code=args.oauth_code, force_reauth=args.force_reauth)
+    processed_dates, processed_count, inserted_count, modified_count = run(start_date_string,end_date_string, oauth_code=args.oauth_code, force_reauth=args.force_reauth)
 
     if args.verbose or args.debug:
         print(f"Processed activities: {processed_count}")
@@ -133,10 +141,19 @@ def main():
 
 def run(start_date_string = "", end_date_string = "", oauth_code = None, force_reauth=False):
 
-    processed_dates = {}
+    print("oura_to_db.run()")
+
+    processed_dates = dict()
+    print(f"start_date_string: {start_date_string}")
+    print(f"end_date_string: {end_date_string}")
+
     ouraclient = get_oura_client( oauth_code=oauth_code, force_reauth=force_reauth)
+    print(f"ouraclient: {ouraclient}")
+    print(f"dir(ouraclient): {dir(ouraclient)}")
+    print(f"ouraclient.personal_info(): {ouraclient.personal_info()}")
 
     data = ouraclient.daily_activity(start_date = start_date_string, end_date = end_date_string)
+    print(f"data: {data}")
     inserted_count = 0
     modified_count = 0
     processed_count = 0
@@ -156,7 +173,10 @@ def run(start_date_string = "", end_date_string = "", oauth_code = None, force_r
         if wrote_to_db:
            dateonly = activity['timestamp'].date()
            processed_dates[dateonly] = True
-    return processed_dates, inserted_count, modified_count
+        logging.debug(f"wrote_to_db: {wrote_to_db}")
+    print(f"processed_dates.keys(): {processed_dates.keys()}")
+    print(f"dir(processed_dates): {dir(processed_dates)}")
+    return processed_dates, processed_count, inserted_count, modified_count
 
 # return result from replace_one()
 @sentry_sdk.trace
@@ -222,7 +242,9 @@ def get_collection():
 
 if __name__ == '__main__':
     try:
+        print("here 1")
         with sentry_sdk.start_transaction(op="task", name=os.path.basename(sys.argv[0])):
+            print("here 2")
             main()
     finally:
         sentry_sdk.flush()

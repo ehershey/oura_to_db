@@ -1,8 +1,8 @@
 run: ./oura_to_db.py ./venv test.env
 	env `cat test.env` ./venv/bin/python3 ./oura_to_db.py
 
-serve: ./oura_to_db.py serve.py
-	env `cat test.env` PATH=$(PATH):./venv/bin ./start.sh
+serve: ./oura_to_db.py ./serve.py
+	env `cat test.env` PYTHONPATH= PATH=$(PATH):./venv/bin ./start.sh
 
 ./venv:
 	python3 -mvenv ./venv

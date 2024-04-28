@@ -16,3 +16,4 @@ pint
 polyline
 timezonefinder
 gunicorn
+jsonify
