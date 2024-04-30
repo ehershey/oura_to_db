@@ -4,6 +4,8 @@ import dateutil
 import jsonify
 import os
 import sys
+import psutil
+import time
 from flask import Flask, request
 import pprint
 import sentry_sdk
@@ -35,22 +37,33 @@ app = Flask(__name__)
 
 
 @app.route("/")
+@sentry_sdk.trace
 def hello_world():
     pprint.pprint(request.url)
     return "<p>Hello, World!</p>"
 
 
 @app.route("/ping")
+@sentry_sdk.trace
 def ping():
     pprint.pprint(request.url)
+    now = time.time()
     return {
         "mongodb": oura_to_db.mongodb_ping(),
         "oura": oura_to_db.oura_ping(),
+        "uptime": now - get_process_start_time(),
     }
+
+
+@sentry_sdk.trace
+def get_process_start_time():
+    p = psutil.Process(os.getpid())
+    return p.create_time()
 
 
 @app.route('/run')
 @app.route("/run/<path:date>")
+@sentry_sdk.trace
 def run(date=None):
     pprint.pprint(request.url)
     end_date_string = date
@@ -88,6 +101,7 @@ def run(date=None):
 
 
 @app.errorhandler(404)
+@sentry_sdk.trace
 def handle_404(e):
     pprint.pprint(e)
     pprint.pprint(request.url)

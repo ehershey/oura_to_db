@@ -37,7 +37,7 @@ def sentry_init(debug=False):
     )
 
 
-autoupdate_version = 261
+autoupdate_version = 262
 
 DB_URL = os.environ["OURA_MONGODB_URI"]
 
