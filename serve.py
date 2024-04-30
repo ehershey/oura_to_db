@@ -22,7 +22,6 @@ required_env_vars = [
     "SENTRY_DSN",
     "OURA_TOKEN",
     "OURA_MONGODB_URI",
-    "REQUIRED_BEARER",
     "TAILSCALE_AUTHKEY"
 ]
 missing_required_env_var = False
@@ -52,14 +51,6 @@ def ping():
 @app.route('/run')
 @app.route("/run/<path:date>")
 def run(date=None):
-    auth = request.headers.get("Authorization")
-    if auth is None or 'Bearer ' not in auth:
-        print(f"No Bearer string in auth: {auth}")
-        return '', 401
-    if auth != f"Bearer {os.environ['REQUIRED_BEARER']}":
-        print(f"Invalid Bearer string in auth: {auth}")
-        return '', 403
-
     end_date_string = date
     start_date_string = date
     print(f"date: {date}")
