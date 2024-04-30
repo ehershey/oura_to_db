@@ -37,11 +37,13 @@ app = Flask(__name__)
 
 @app.route("/")
 def hello_world():
+    pprint.pprint(request.url)
     return "<p>Hello, World!</p>"
 
 
 @app.route("/ping")
 def ping():
+    pprint.pprint(request.url)
     return {
         "mongodb": oura_to_db.mongodb_ping(),
         "oura": oura_to_db.oura_ping(),
@@ -51,6 +53,7 @@ def ping():
 @app.route('/run')
 @app.route("/run/<path:date>")
 def run(date=None):
+    pprint.pprint(request.url)
     end_date_string = date
     start_date_string = date
     print(f"date: {date}")
@@ -89,7 +92,7 @@ def run(date=None):
 def handle_404(e):
     pprint.pprint(e)
     pprint.pprint(request.url)
-    return 'Not Found, but we HANDLED IT'
+    return '', 404
 
 
 if __name__ == "__main__":
