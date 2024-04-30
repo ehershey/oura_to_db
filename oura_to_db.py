@@ -8,9 +8,7 @@ import sys
 import dateutil
 import logging
 import os
-# import erniemail
 from pymongo import MongoClient
-# from oura import OuraClient, OuraOAuth2Client
 from oura import OuraOAuth2Client
 from oura.v2 import OuraClientV2
 from types import SimpleNamespace
@@ -27,17 +25,19 @@ sentry_sdk.init(
     debug=False,
     )
 
-def sentry_init(debug = False):
+
+def sentry_init(debug=False):
     sentry_sdk.init(
-    traces_sample_rate=1.0,
-    profiles_sample_rate=1.0,
-    enable_tracing=True,
-    integrations=[PyMongoIntegration(),],
-    #debug=debug,
-    debug=False,
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+        enable_tracing=True,
+        integrations=[PyMongoIntegration(),],
+        # debug=debug,
+        debug=False,
     )
 
-autoupdate_version = 224
+
+autoupdate_version = 261
 
 DB_URL = os.environ["OURA_MONGODB_URI"]
 
@@ -46,9 +46,10 @@ COLLECTION_NAME = 'activity'
 
 OURA_TOKEN = os.environ["OURA_TOKEN"]
 
-#ACTIVITY_VERSION = 0.1
+# ACTIVITY_VERSION = 0.1
 ACTIVITY_VERSION = 0.2  # change timestamps to date objects
-#ACTIVITY_VERSION = 0.3  # Add map
+# ACTIVITY_VERSION = 0.3  # Add map
+
 
 @sentry_sdk.trace
 def get_args():
@@ -90,12 +91,11 @@ def get_args():
     args = parser.parse_args()
     return args
 
+
 @sentry_sdk.trace
 def get_oura_client(oauth_code=None, force_reauth=False):
-    #print(f"OURA_TOKEN: {OURA_TOKEN}")
-    #print(f"oauth_code: {oauth_code}")
-    #print(f"force_reauth: {force_reauth}")
     return OuraClientV2(personal_access_token=OURA_TOKEN)
+
 
 @sentry_sdk.trace
 def main():
@@ -115,31 +115,29 @@ def main():
     if args.date is None:
         end_date = datetime.datetime.now()
     else:
-        #end_date = dateutil.parser.parse(args.date)
         end_date = args.date
-    start_date = end_date - datetime.timedelta(days = args.days_back)
+    start_date = end_date - datetime.timedelta(days=args.days_back)
 
     # end date is exclusive
-    end_date = end_date + datetime.timedelta(days = 1)
+    end_date = end_date + datetime.timedelta(days=1)
     logging.debug(f"start_date: {start_date}")
     logging.debug(f"end_date: {end_date}")
 
     start_date_string = start_date.strftime("%Y-%m-%d")
     end_date_string = end_date.strftime("%Y-%m-%d")
 
-    processed_dates, processed_count, inserted_count, modified_count = run(start_date_string,end_date_string, oauth_code=args.oauth_code, force_reauth=args.force_reauth)
+    resp = run(start_date_string,end_date_string, oauth_code=args.oauth_code, force_reauth=args.force_reauth)
+    # processed_dates, processed_count, inserted_count, modified_count = 
 
     if args.verbose or args.debug:
-        print(f"Processed activities: {processed_count}")
-        print(f"New activities: {inserted_count}")
-        print(f"Modified activities: {modified_count}")
-    for processed_date in processed_dates:
+        print(f"Processed activities: {resp['processed_count']}")
+        print(f"New activities: {resp['inserted_count']}")
+        print(f"Modified activities: {resp['modified_count']}")
+    for processed_date in resp['processed_dates']:
         print(f"date: {processed_date}")
 
 
-
-
-def run(start_date_string = "", end_date_string = "", oauth_code = None, force_reauth=False):
+def run(start_date_string="", end_date_string="", oauth_code=None, force_reauth=False):
 
     print("oura_to_db.run()")
 
@@ -147,19 +145,18 @@ def run(start_date_string = "", end_date_string = "", oauth_code = None, force_r
     print(f"start_date_string: {start_date_string}")
     print(f"end_date_string: {end_date_string}")
 
-    ouraclient = get_oura_client( oauth_code=oauth_code, force_reauth=force_reauth)
-    print(f"ouraclient: {ouraclient}")
-    print(f"dir(ouraclient): {dir(ouraclient)}")
-    print(f"ouraclient.personal_info(): {ouraclient.personal_info()}")
+    ouraclient = get_oura_client(oauth_code=oauth_code, force_reauth=force_reauth)
 
-    data = ouraclient.daily_activity(start_date = start_date_string, end_date = end_date_string)
+    data=ouraclient.daily_activity(start_date=start_date_string, end_date=end_date_string)
     print(f"data: {data}")
     inserted_count = 0
     modified_count = 0
     processed_count = 0
     for activity in data['data']:
-        activity['timestamp'] = dateutil.parser.parse(activity['timestamp']).astimezone(tz=pytz.utc).replace(tzinfo=None)
-        activity['met']['timestamp'] = dateutil.parser.parse(activity['met']['timestamp']).astimezone(tz=pytz.utc).replace(tzinfo=None)
+        activity['timestamp'] = dateutil.parser.parse(
+            activity['timestamp']).astimezone(tz=pytz.utc).replace(tzinfo=None)
+        activity['met']['timestamp'] = dateutil.parser.parse(
+            activity['met']['timestamp']).astimezone(tz=pytz.utc).replace(tzinfo=None)
         result = store_activity(activity)
         wrote_to_db = False
         if result['matched_count'] == 0:
@@ -167,16 +164,22 @@ def run(start_date_string = "", end_date_string = "", oauth_code = None, force_r
             wrote_to_db = True
         processed_count += 1
         if result['modified_count'] != 0:
-            #print("Modified activity")
+            # print("Modified activity")
             wrote_to_db = True
         modified_count += result['modified_count']
         if wrote_to_db:
-           dateonly = activity['timestamp'].date()
-           processed_dates[dateonly] = True
+            dateonly = activity['timestamp'].date()
+            processed_dates[dateonly] = True
         logging.debug(f"wrote_to_db: {wrote_to_db}")
     print(f"processed_dates.keys(): {processed_dates.keys()}")
     print(f"dir(processed_dates): {dir(processed_dates)}")
-    return processed_dates, processed_count, inserted_count, modified_count
+    return {
+        "processed_dates": processed_dates,
+        "processed_count": processed_count,
+        "inserted_count": inserted_count,
+        "modified_count": modified_count,
+    }
+
 
 # return result from replace_one()
 @sentry_sdk.trace
@@ -185,7 +188,7 @@ def store_activity(activity):
     collection = get_collection()
     logging.debug(f"activity_query: {activity_query}")
     db_activity = collection.find_one(activity_query)
-    #logging.debug(f"db_activity: {db_activity: .60}")
+    # logging.debug(f"db_activity: {db_activity: .60}")
 
     do_replace = True
     if db_activity is not None:
@@ -217,16 +220,18 @@ def store_activity(activity):
             logging.debug(f"here 8")
         logging.debug(f"here 9")
 
-
     logging.debug(f"db_activity: {db_activity}")
     logging.debug(f"activity: {activity}")
 
     if do_replace:
         result = collection.replace_one(
             activity_query, activity, upsert=True)
-        result_info = { "upserted_id": result.upserted_id, "modified_count": result.modified_count, "matched_count": result.matched_count }
+        result_info = { 
+            "upserted_id": result.upserted_id, 
+            "modified_count": result.modified_count, 
+            "matched_count": result.matched_count }
     else:
-        result_info = { "upserted_id": None, "modified_count": 0, "matched_count": 1 }
+        result_info = {"upserted_id": None, "modified_count": 0, "matched_count": 1}
     logging.debug("result_info['upserted_id']: %s", result_info['upserted_id'])
     logging.debug("result_info['modified_count']: %s", result_info['modified_count'])
     return result_info
@@ -240,16 +245,22 @@ def get_collection():
 
     return database[COLLECTION_NAME]
 
+
 @sentry_sdk.trace
 def mongodb_ping():
-    return  MongoClient(DB_URL)[DB_NAME].command('ping')
+    return MongoClient(DB_URL)[DB_NAME].command('ping')
+
+
+@sentry_sdk.trace
+def oura_ping():
+    ouraclient = get_oura_client()
+    if "email" in ouraclient.personal_info():
+        return { "ok": True }
 
 
 if __name__ == '__main__':
     try:
-        print("here 1")
         with sentry_sdk.start_transaction(op="task", name=os.path.basename(sys.argv[0])):
-            print("here 2")
             main()
     finally:
         sentry_sdk.flush()
