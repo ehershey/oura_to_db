@@ -22,7 +22,6 @@ required_env_vars = [
     "SENTRY_DSN",
     "OURA_TOKEN",
     "OURA_MONGODB_URI",
-    "TAILSCALE_AUTHKEY"
 ]
 missing_required_env_var = False
 for var in required_env_vars:
