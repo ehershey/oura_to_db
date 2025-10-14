@@ -37,7 +37,7 @@ def sentry_init(debug=False):
     )
 
 
-autoupdate_version = 262
+autoupdate_version = 265
 
 DB_URL = os.environ["OURA_MONGODB_URI"]
 
@@ -47,8 +47,10 @@ COLLECTION_NAME = 'activity'
 OURA_TOKEN = os.environ["OURA_TOKEN"]
 
 # ACTIVITY_VERSION = 0.1
-ACTIVITY_VERSION = 0.2  # change timestamps to date objects
+# ACTIVITY_VERSION = 0.2  # change timestamps to date objects
 # ACTIVITY_VERSION = 0.3  # Add map
+# output "day" field string instead of converted timestamp (let app and service deal more with timestamps)
+ACTIVITY_VERSION = 0.4
 
 
 @sentry_sdk.trace
@@ -153,6 +155,7 @@ def run(start_date_string="", end_date_string="", oauth_code=None, force_reauth=
     modified_count = 0
     processed_count = 0
     for activity in data['data']:
+        activity['activity_version'] = ACTIVITY_VERSION
         activity['timestamp'] = dateutil.parser.parse(
             activity['timestamp']).astimezone(tz=pytz.utc).replace(tzinfo=None)
         activity['met']['timestamp'] = dateutil.parser.parse(
@@ -168,7 +171,7 @@ def run(start_date_string="", end_date_string="", oauth_code=None, force_reauth=
             wrote_to_db = True
         modified_count += result['modified_count']
         if wrote_to_db:
-            dateonly = activity['timestamp'].date()
+            dateonly = activity['day']
             processed_dates[dateonly] = True
         logging.debug(f"wrote_to_db: {wrote_to_db}")
     print(f"processed_dates.keys(): {processed_dates.keys()}")
@@ -200,7 +203,9 @@ def store_activity(activity):
                 logging.debug(f"field diff: {field}")
                 break
         logging.debug(f"here 0.5")
-        if 'met' in activity:
+        if 'activity_version' not in db_activity:
+            do_replace = True
+        elif 'met' in activity:
             logging.debug(f"here 1")
             if 'met' not in db_activity:
                 logging.debug(f"here 2")
