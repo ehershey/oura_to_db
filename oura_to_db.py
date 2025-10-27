@@ -9,13 +9,8 @@ import dateutil
 import logging
 import os
 from pymongo import MongoClient
-from oura import OuraOAuth2Client
 from oura.v2 import OuraClientV2
-from types import SimpleNamespace
-import pprint
 import pytz
-import pymongo
-import time
 import datetime
 
 
@@ -37,7 +32,7 @@ def sentry_init(debug=False):
     )
 
 
-autoupdate_version = 265
+autoupdate_version = 278
 
 DB_URL = os.environ["OURA_MONGODB_URI"]
 
@@ -90,6 +85,11 @@ def get_args():
         default=False,
         help='Print debugging info to stderr',
         action='store_true')
+    parser.add_argument(
+        '--dry-run',
+        default=False,
+        help="Don't write to DB",
+        action='store_true')
     args = parser.parse_args()
     return args
 
@@ -128,8 +128,8 @@ def main():
     start_date_string = start_date.strftime("%Y-%m-%d")
     end_date_string = end_date.strftime("%Y-%m-%d")
 
-    resp = run(start_date_string,end_date_string, oauth_code=args.oauth_code, force_reauth=args.force_reauth)
-    # processed_dates, processed_count, inserted_count, modified_count = 
+    resp = run(start_date_string,end_date_string, oauth_code=args.oauth_code, force_reauth=args.force_reauth, dry_run=args.dry_run)
+    # processed_dates, processed_count, inserted_count, modified_count =
 
     if args.verbose or args.debug:
         print(f"Processed activities: {resp['processed_count']}")
@@ -139,7 +139,7 @@ def main():
         print(f"date: {processed_date}")
 
 
-def run(start_date_string="", end_date_string="", oauth_code=None, force_reauth=False):
+def run(start_date_string="", end_date_string="", oauth_code=None, force_reauth=False, dry_run=False):
 
     print("oura_to_db.run()")
 
@@ -160,7 +160,7 @@ def run(start_date_string="", end_date_string="", oauth_code=None, force_reauth=
             activity['timestamp']).astimezone(tz=pytz.utc).replace(tzinfo=None)
         activity['met']['timestamp'] = dateutil.parser.parse(
             activity['met']['timestamp']).astimezone(tz=pytz.utc).replace(tzinfo=None)
-        result = store_activity(activity)
+        result = store_activity(activity=activity, dry_run=dry_run)
         wrote_to_db = False
         if result['matched_count'] == 0:
             inserted_count += 1
@@ -186,7 +186,7 @@ def run(start_date_string="", end_date_string="", oauth_code=None, force_reauth=
 
 # return result from replace_one()
 @sentry_sdk.trace
-def store_activity(activity):
+def store_activity(activity = None, dry_run= False):
     activity_query = {"day": activity['day']}
     collection = get_collection()
     logging.debug(f"activity_query: {activity_query}")
@@ -198,43 +198,53 @@ def store_activity(activity):
         do_replace = False
         activity["_id"] = db_activity["_id"]
         for field in db_activity:
-            if activity[field] != db_activity[field]:
+            # if field != "update_timestamp" and field not in db_activity or activity[field] != db_activity[field]:
+            if field != "update_timestamp" and activity[field] != db_activity[field]:
                 do_replace = True
                 logging.debug(f"field diff: {field}")
                 break
-        logging.debug(f"here 0.5")
+        logging.debug("here 0.5")
         if 'activity_version' not in db_activity:
             do_replace = True
         elif 'met' in activity:
-            logging.debug(f"here 1")
+            logging.debug("here 1")
             if 'met' not in db_activity:
-                logging.debug(f"here 2")
+                logging.debug("here 2")
                 do_replace = True
             else:  # met in both
-                logging.debug(f"here 3")
+                logging.debug("here 3")
                 if 'items' in activity['met']:
-                    logging.debug(f"here 4")
+                    logging.debug("here 4")
                     if 'items' not in db_activity['met']:
-                        logging.debug(f"here 5")
+                        logging.debug("here 5")
                         do_replace = True
                     else:  # items in both
-                        logging.debug(f"here 6")
+                        logging.debug("here 6")
                         if activity['met']['items'] != db_activity['met']['items']:
-                            logging.debug(f"here 7")
+                            logging.debug("here 7")
                             do_replace = True
-            logging.debug(f"here 8")
-        logging.debug(f"here 9")
+            logging.debug("here 8")
+        logging.debug("here 9")
 
     logging.debug(f"db_activity: {db_activity}")
+    activity["update_timestamp"] = datetime.datetime.now()
     logging.debug(f"activity: {activity}")
 
     if do_replace:
-        result = collection.replace_one(
-            activity_query, activity, upsert=True)
-        result_info = { 
-            "upserted_id": result.upserted_id, 
-            "modified_count": result.modified_count, 
-            "matched_count": result.matched_count }
+        if dry_run:
+            logging.debug("Skipping db call in dry run mode")
+            result_info = {
+                "upserted_id": None,
+                "modified_count": 1,
+                "matched_count": 1,
+}
+        else:
+            result = collection.replace_one(
+                activity_query, activity, upsert=True)
+            result_info = {
+                "upserted_id": result.upserted_id,
+                "modified_count": result.modified_count,
+                "matched_count": result.matched_count }
     else:
         result_info = {"upserted_id": None, "modified_count": 0, "matched_count": 1}
     logging.debug("result_info['upserted_id']: %s", result_info['upserted_id'])
