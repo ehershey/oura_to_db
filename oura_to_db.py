@@ -35,7 +35,7 @@ def sentry_init(debug=False):
     )
 
 
-autoupdate_version = 278
+autoupdate_version = 279
 
 DB_URL = os.environ["OURA_MONGODB_URI"]
 
@@ -250,7 +250,7 @@ def store_activity(activity=None, dry_run=False):
         logging.debug("here 9")
 
     logging.debug(f"db_activity: {db_activity}")
-    activity["update_timestamp"] = datetime.datetime.now()
+    activity["update_timestamp"] = datetime.datetime.now().astimezone(tz=pytz.utc).replace(tzinfo=None)
     logging.debug(f"activity: {activity}")
 
     if do_replace:
