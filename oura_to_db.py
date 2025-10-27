@@ -35,7 +35,7 @@ def sentry_init(debug=False):
     )
 
 
-autoupdate_version = 279
+autoupdate_version = 280
 
 DB_URL = os.environ["OURA_MONGODB_URI"]
 
@@ -48,7 +48,10 @@ OURA_TOKEN = os.environ["OURA_TOKEN"]
 # ACTIVITY_VERSION = 0.2  # change timestamps to date objects
 # ACTIVITY_VERSION = 0.3  # Add map
 # output "day" field string instead of converted timestamp (let app and service deal more with timestamps)
-ACTIVITY_VERSION = 0.4
+# ACTIVITY_VERSION = 0.4
+# include "update_timestamp"
+ACTIVITY_VERSION = 0.5
+
 
 
 @sentry_sdk.trace
