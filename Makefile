@@ -4,6 +4,10 @@ run: ./oura_to_db.py ./venv test.env
 serve: ./oura_to_db.py ./serve.py
 	env `cat test.env` PYTHONPATH= PATH=$(PATH):./venv/bin ./start.sh
 
+deploy:
+	git push github 
+	open https://dashboard.render.com/web/srv-comiockf7o1s73f581v0
+
 ./venv:
 	python3 -mvenv ./venv
 
@@ -13,4 +17,4 @@ pip: requirements.txt ./venv
 test.env:
 	echo missing required test.env
 
-.PHONY: run pip
+.PHONY: run pip deploy
