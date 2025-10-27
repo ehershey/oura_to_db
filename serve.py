@@ -17,7 +17,9 @@ sentry_sdk.init(
     traces_sample_rate=1.0,
     profiles_sample_rate=1.0,
     enable_tracing=True,
-    integrations=[FlaskIntegration(),],
+    integrations=[
+        FlaskIntegration(),
+    ],
 )
 
 required_env_vars = [
@@ -61,7 +63,7 @@ def get_process_start_time():
     return p.create_time()
 
 
-@app.route('/run')
+@app.route("/run")
 @app.route("/run/<path:date>")
 @sentry_sdk.trace
 def run(date=None):
@@ -78,7 +80,7 @@ def run(date=None):
         try:
             parsed_date = dateutil.parser.parse(date)
         except Exception:
-            return '', 500
+            return "", 500
         print(f"parsed_date: {parsed_date}")
         end_date = parsed_date + datetime.timedelta(days=1)
 
@@ -89,11 +91,11 @@ def run(date=None):
     # str(dir(__import__("oura_to_db")) ) +
     # " / " + str(__import__("oura_to_db").__file__)
 
-    # processed_dates, processed_count, inserted_count, modified_count = 
+    # processed_dates, processed_count, inserted_count, modified_count =
     resp = oura_to_db.run(
-        end_date_string=end_date_string,
-        start_date_string=start_date_string)
-    return_string = ''
+        end_date_string=end_date_string, start_date_string=start_date_string
+    )
+    return_string = ""
     for date in resp["processed_dates"]:
         return_string = return_string + str(date) + "\n"
     return_string = return_string
@@ -105,7 +107,7 @@ def run(date=None):
 def handle_404(e):
     pprint.pprint(e)
     pprint.pprint(request.url)
-    return '', 404
+    return "", 404
 
 
 if __name__ == "__main__":
