@@ -5,11 +5,14 @@ Download Oura activity data and save in database
 
 import argparse
 import sys
+import time
 import dateutil
 import logging
+import pickle
 import os
 from pymongo import MongoClient
 from oura.v2 import OuraClientV2
+from oura import OuraOAuth2Client
 import pytz
 import datetime
 
@@ -35,14 +38,18 @@ def sentry_init(debug=False):
     )
 
 
-autoupdate_version = 280
+autoupdate_version = 391
 
 DB_URL = os.environ["OURA_MONGODB_URI"]
 
 DB_NAME = "oura"
 COLLECTION_NAME = "activity"
 
-OURA_TOKEN = os.environ["OURA_TOKEN"]
+# generally only set OURA_TOKEN or (OURA_CLIENT_SECRET, OURA_CLIENT_ID, and OURA_REDIRECT_URI)
+OURA_TOKEN = os.environ.get("OURA_TOKEN", None)
+OURA_CLIENT_SECRET = os.environ.get("OURA_CLIENT_SECRET", None)
+OURA_CLIENT_ID = os.environ.get("OURA_CLIENT_ID", None)
+OURA_REDIRECT_URI = os.environ.get("OURA_REDIRECT_URI", None)
 
 # ACTIVITY_VERSION = 0.1
 # ACTIVITY_VERSION = 0.2  # change timestamps to date objects
@@ -52,6 +59,7 @@ OURA_TOKEN = os.environ["OURA_TOKEN"]
 # include "update_timestamp"
 ACTIVITY_VERSION = 0.5
 
+PICKLE_FILE = os.environ.get("OURA_PICKLE_FILE", os.environ["HOME"] + "/Dropbox/Misc/.oura_pickle")
 
 @sentry_sdk.trace
 def get_args():
@@ -100,8 +108,36 @@ def get_args():
 
 
 @sentry_sdk.trace
-def get_oura_client(oauth_code=None, force_reauth=False):
-    return OuraClientV2(personal_access_token=OURA_TOKEN)
+def get_oura_client():
+
+
+# The `refresh_callback` is a fuction that takes a token dict and saves it somewhere. It will look like:
+# {'token_type': 'bearer', 'refresh_token': <refresh>, 'access_token': <token>, 'expires_in': 86400, 'expires_at': 1546485086.3277025}
+#
+
+    config_data = get_pickle_data()
+    return OuraClientV2(personal_access_token=OURA_TOKEN,
+    client_secret=OURA_CLIENT_SECRET,
+    client_id=OURA_CLIENT_ID,
+    access_token=config_data.get("access_token",None),
+    refresh_token=config_data.get("refresh_token",None),
+    refresh_callback=save_pickle,
+    )
+
+@sentry_sdk.trace
+def init_oura(oauth_code=None, force_reauth=False):
+
+    if OURA_TOKEN:
+        logging.debug("skipping oauth and using personal access token in OURA_TOKEN")
+        return
+    config_data = get_pickle_data()
+
+    get_oauth_data(
+        oauth_code=oauth_code,
+        config_data=config_data,
+        force_reauth=force_reauth,
+    )
+
 
 
 @sentry_sdk.trace
@@ -164,7 +200,12 @@ def run(
     print(f"start_date_string: {start_date_string}")
     print(f"end_date_string: {end_date_string}")
 
-    ouraclient = get_oura_client(oauth_code=oauth_code, force_reauth=force_reauth)
+    init_oura(
+        oauth_code=oauth_code,
+        force_reauth=force_reauth,
+    )
+
+    ouraclient = get_oura_client()
 
     data = ouraclient.daily_activity(
         start_date=start_date_string, end_date=end_date_string
@@ -300,6 +341,74 @@ def oura_ping():
         return {"ok": True}
 
 
+# Will create pickle file if it doesn't already exist
+#
+@sentry_sdk.trace
+def save_pickle(config_data={}):
+    with open(PICKLE_FILE, "wb") as f:
+        pickle.dump(config_data, f)
+
+
+@sentry_sdk.trace
+def _load_existing_pickle():
+    with open(PICKLE_FILE, "rb") as f:
+        config_data = pickle.load(f)
+    return config_data
+
+
+@sentry_sdk.trace
+def get_pickle_data():
+    if os.path.exists(PICKLE_FILE):
+        logging.debug("found pickle file, loading it")
+        return _load_existing_pickle()
+    else:
+        logging.debug("No pickle file, creating it")
+        save_pickle()
+        return {}
+
+
+@sentry_sdk.trace
+def get_oauth_data(
+    oauth_code=None,
+    config_data={},
+    force_reauth=False,
+):
+    if "access_token" in config_data and not force_reauth:
+        logging.debug("Found auth config data in pickle")
+    else:
+        logging.debug("No auth config in pickle or force_reauth=true, doing auth dance")
+
+        auth_client = OuraOAuth2Client(client_id=OURA_CLIENT_ID, client_secret=OURA_CLIENT_SECRET)
+        if oauth_code and not force_reauth:
+            code = oauth_code
+        else:
+            if not sys.stdout.isatty():
+                raise Exception("Cannot ask for oauth code input on non-tty")
+            # "Step 1: Direct user to authorization page"
+            authorize_url = auth_client.authorize_endpoint(redirect_uri=OURA_REDIRECT_URI,
+        scope=["extapi:email", "extapi:personal", "extapi:daily", "extapi:heartrate", "extapi:workout", "extapi:tag", "extapi:session"],
+            )
+
+            print(f"authorize_url: {authorize_url}")
+
+            # Extract the code from your webapp response
+            code = input("Enter code from redirect: ")
+
+        logging.debug(f"Exchanging code {code} for tokens")
+        token_response = auth_client.fetch_access_token(code=code,
+        )
+
+        config_data["access_token"] = token_response["access_token"]
+        config_data["refresh_token"] = token_response["refresh_token"]
+        config_data["expires_at"] = token_response["expires_at"]
+
+    logging.debug("config_data:")
+    logging.debug(config_data)
+
+    logging.debug("Saving auth config data to pickle file")
+
+    save_pickle(config_data)
+
 if __name__ == "__main__":
     try:
         with sentry_sdk.start_transaction(
@@ -308,3 +417,5 @@ if __name__ == "__main__":
             main()
     finally:
         sentry_sdk.flush()
+
+
